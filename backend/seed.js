@@ -3,67 +3,75 @@ const { pool } = require('./config/db');
 const bootstrapDB = async () => {
     try {
         const createTablesQuery = `
+            CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                role VARCHAR(50) DEFAULT 'Customer'
+            );
+
             CREATE TABLE IF NOT EXISTS raw_materials (
-                id SERIAL PRIMARY KEY,
+                id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(255) UNIQUE NOT NULL,
-                available_quantity INTEGER NOT NULL DEFAULT 0,
+                available_quantity INT NOT NULL DEFAULT 0,
                 unit_cost DECIMAL(10,2) NOT NULL,
-                procurement_time INTEGER NOT NULL, -- in days
-                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                minimum_threshold INTEGER DEFAULT 0
+                procurement_time INT NOT NULL,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                minimum_threshold INT DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS products (
-                id SERIAL PRIMARY KEY,
+                id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(255) UNIQUE NOT NULL,
                 selling_price DECIMAL(10,2) NOT NULL,
-                production_time INTEGER NOT NULL, -- in days
-                delivery_time INTEGER NOT NULL -- in days
+                production_time INT NOT NULL,
+                delivery_time INT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS product_recipes (
-                id SERIAL PRIMARY KEY,
-                product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-                raw_material_id INTEGER REFERENCES raw_materials(id) ON DELETE CASCADE,
-                quantity_required_per_unit INTEGER NOT NULL,
-                UNIQUE(product_id, raw_material_id)
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                product_id INT,
+                raw_material_id INT,
+                quantity_required_per_unit INT NOT NULL,
+                UNIQUE(product_id, raw_material_id),
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+                FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE CASCADE
             );
 
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'order_status') THEN
-                    CREATE TYPE order_status AS ENUM ('PENDING', 'WAITING_FOR_MATERIAL', 'IN_PRODUCTION', 'COMPLETED');
-                END IF;
-            END$$;
-
             CREATE TABLE IF NOT EXISTS orders (
-                id SERIAL PRIMARY KEY,
-                user_id VARCHAR(255) NOT NULL, -- Storing MongoDB User ID as string
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL,
                 total_price DECIMAL(10,2) NOT NULL,
                 total_cost DECIMAL(10,2) NOT NULL,
                 profit DECIMAL(10,2) NOT NULL,
-                estimated_time INTEGER NOT NULL, -- Total duration in days
-                estimated_wait_time INTEGER NOT NULL DEFAULT 0, -- Wait time for materials in days
-                estimated_completion_time TIMESTAMP, -- Added via user refinement
+                estimated_time INT NOT NULL,
+                estimated_wait_time INT NOT NULL DEFAULT 0,
+                estimated_completion_time TIMESTAMP NULL,
                 status VARCHAR(50) DEFAULT 'PENDING',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
-            -- Ensure status uses standard values if ENUM is flaky
-            
             CREATE TABLE IF NOT EXISTS order_items (
-                id SERIAL PRIMARY KEY,
-                order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
-                product_id INTEGER REFERENCES products(id),
-                quantity INTEGER NOT NULL
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                order_id INT,
+                product_id INT,
+                quantity INT NOT NULL,
+                FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+                FOREIGN KEY (product_id) REFERENCES products(id)
             );
         `;
         
-        await pool.query(createTablesQuery);
-        console.log("PostgreSQL tables checked/created.");
+        // MySQL driver doesn't natively support executing multiple statements by default
+        // unless multipleStatements: true is set, but it's safer to just split them.
+        const queries = createTablesQuery.split(';').map(q => q.trim()).filter(q => q !== '');
+        for (let q of queries) {
+            await pool.query(q);
+        }
+        console.log("MySQL tables checked/created.");
 
         // Check if data exists
-        const { rows } = await pool.query('SELECT COUNT(*) FROM raw_materials');
+        const [rows] = await pool.execute('SELECT COUNT(*) as count FROM raw_materials');
         if (parseInt(rows[0].count) === 0) {
             console.log("Seeding sample data...");
             await seedSampleData();
@@ -75,32 +83,38 @@ const bootstrapDB = async () => {
 };
 
 const seedSampleData = async () => {
-    const rmQuery = `
-        INSERT INTO raw_materials (name, available_quantity, unit_cost, procurement_time, minimum_threshold) VALUES
-        ('Steel Rod', 100, 50, 2, 10),
-        ('Iron Sheet', 200, 30, 1, 20),
-        ('Copper Wire', 50, 80, 3, 5)
-        RETURNING id, name;
-    `;
-    const { rows: rms } = await pool.query(rmQuery);
+    const rmData = [
+        ['Steel Rod', 100, 50, 2, 10],
+        ['Iron Sheet', 200, 30, 1, 20],
+        ['Copper Wire', 50, 80, 3, 5]
+    ];
     
     const rmMap = {};
-    rms.forEach(r => rmMap[r.name] = r.id);
+    for (const rm of rmData) {
+        const [result] = await pool.execute(
+            'INSERT INTO raw_materials (name, available_quantity, unit_cost, procurement_time, minimum_threshold) VALUES (?, ?, ?, ?, ?)',
+            rm
+        );
+        rmMap[rm[0]] = result.insertId;
+    }
 
-    const pdQuery = `
-        INSERT INTO products (name, selling_price, production_time, delivery_time) VALUES
-        ('Steel Gate', 5000, 2, 1),
-        ('Metal Frame', 3000, 1, 1),
-        ('Steel Door', 7000, 2, 1),
-        ('Industrial Pipe', 2000, 1, 1),
-        ('Reinforced Beam', 8000, 3, 2),
-        ('Metal Container', 10000, 3, 2)
-        RETURNING id, name;
-    `;
-    const { rows: pds } = await pool.query(pdQuery);
-    
+    const pdData = [
+        ['Steel Gate', 5000, 2, 1],
+        ['Metal Frame', 3000, 1, 1],
+        ['Steel Door', 7000, 2, 1],
+        ['Industrial Pipe', 2000, 1, 1],
+        ['Reinforced Beam', 8000, 3, 2],
+        ['Metal Container', 10000, 3, 2]
+    ];
+
     const pdMap = {};
-    pds.forEach(r => pdMap[r.name] = r.id);
+    for (const pd of pdData) {
+        const [result] = await pool.execute(
+            'INSERT INTO products (name, selling_price, production_time, delivery_time) VALUES (?, ?, ?, ?)',
+            pd
+        );
+        pdMap[pd[0]] = result.insertId;
+    }
 
     // Recipes
     const recipes = [
@@ -126,8 +140,8 @@ const seedSampleData = async () => {
     ];
 
     for (let r of recipes) {
-        await pool.query(
-            'INSERT INTO product_recipes (product_id, raw_material_id, quantity_required_per_unit) VALUES ($1, $2, $3)',
+        await pool.execute(
+            'INSERT INTO product_recipes (product_id, raw_material_id, quantity_required_per_unit) VALUES (?, ?, ?)',
             [pdMap[r.product], rmMap[r.rm], r.qty]
         );
     }

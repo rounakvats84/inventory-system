@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const { connectDB } = require('./config/db');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const orderRoutes = require('./routes/orders');
@@ -21,6 +20,5 @@ const PORT = 5000;
 
 app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
-    await connectDB();
     await bootstrapDB();
 });
