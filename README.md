@@ -60,7 +60,6 @@ cd inventory-system
 ```
 
 ### 2. Start the databases
-Make sure Docker Desktop is **open and running**, then:
 ```bash
 cd backend
 npm install 
