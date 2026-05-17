@@ -158,13 +158,18 @@ const Inventory = () => {
                                         <span className="font-bold text-slate-200">{item.name}</span>
                                         <span className="font-bold text-emerald-400">₹{item.cost.toLocaleString()}</span>
                                     </div>
-                                    <div className="flex items-center space-x-2">
-                                        <input 
-                                            type="number" min="0" value={item.quantity}
-                                            onChange={(e) => updateCartQty(item.raw_material, e.target.value)}
-                                            className="w-20 rounded-lg bg-black/20 border border-white/10 text-slate-100 text-sm px-2 py-1"
-                                        />
-                                        <span className="text-xs text-slate-500">x ₹{item.unit_cost}</span>
+                                    <div className="flex items-center justify-between space-x-2">
+                                        <div className="flex items-center space-x-2">
+                                            <input 
+                                                type="number" min="0" value={item.quantity}
+                                                onChange={(e) => updateCartQty(item.raw_material, e.target.value)}
+                                                className="w-20 rounded-lg bg-black/20 border border-white/10 text-slate-100 text-sm px-2 py-1"
+                                            />
+                                            <span className="text-xs text-slate-500">x ₹{item.unit_cost}</span>
+                                        </div>
+                                        <button onClick={() => updateCartQty(item.raw_material, 0)} className="text-slate-500 hover:text-rose-400 transition-colors p-1 rounded-md hover:bg-rose-500/10">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                        </button>
                                     </div>
                                 </div>
                             ))}

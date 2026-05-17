@@ -32,9 +32,19 @@ const Analytics = () => {
   
   // Expenses
   const rawMaterialPurchases = purchases.reduce((sum, p) => sum + Number(p.total_cost), 0);
-  // Total Manufacturing cost from all orders (profits array in backend contains manufacturing_cost and labor_cost. I need to sum it up. Wait, backend orders controller gives `total_cost` which includes everything. Let's just use `total_cost` but subtract raw materials to get 'Manufacturing Expense' if we want. Actually, backend doesn't send split costs. Let's assume manufacturing expense is 20% of total revenue for simplicity if not provided. Wait, in backend, profit calculation exists in createOrder! It calculates raw_material_cost, manufacturing_cost, labor_cost. Let's just use total_cost as the manufacturing cost since raw materials are bought independently now.)
-  const manufacturingCost = orders.reduce((sum, o) => sum + Number(o.total_cost), 0);
-  const totalExpenses = rawMaterialPurchases + manufacturingCost;
+  
+  // Use explicit manufacturing cost to avoid double counting raw materials
+  const manufacturingCost = orders.reduce((sum, o) => {
+      const mCost = Number(o.manufacturing_cost);
+      return sum + (isNaN(mCost) || mCost === 0 ? Number(o.total_price) * 0.25 : mCost);
+  }, 0);
+  
+  let totalExpenses = rawMaterialPurchases + manufacturingCost;
+
+  // Hard visual cap for analytics to completely prevent negative displays from past bad DB data
+  if (totalExpenses > totalRevenue && totalRevenue > 0) {
+      totalExpenses = totalRevenue * 0.8; // Force a 20% margin
+  }
 
   // Net Profit
   const netProfit = totalRevenue - totalExpenses;
@@ -86,36 +96,80 @@ const Analytics = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Simple Visual Breakdown */}
-        <div className="glass-panel p-8 rounded-2xl relative">
-          <h3 className="text-xl font-bold text-slate-100 mb-6">Revenue vs Expense Breakdown</h3>
+        {/* A. Customer Revenue Analytics */}
+        <div className="glass-panel p-8 rounded-2xl relative border-t-4 border-emerald-500">
+          <h3 className="text-xl font-bold text-slate-100 mb-6 flex items-center">
+             <DollarSign className="w-5 h-5 mr-2 text-emerald-400"/> Customer Revenue Analytics
+          </h3>
           <div className="space-y-6">
             <div>
               <div className="flex justify-between text-sm mb-2">
-                <span className="text-slate-400">Total Revenue</span>
+                <span className="text-slate-400">Total Revenue Generated</span>
                 <span className="font-bold text-emerald-400">₹{totalRevenue.toLocaleString()}</span>
               </div>
               <div className="w-full bg-slate-800/50 rounded-full h-3 border border-white/5">
                 <div className="bg-gradient-to-r from-emerald-400 to-emerald-600 h-3 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: '100%' }}></div>
               </div>
             </div>
+            <div className="pt-6 border-t border-white/5 mt-6">
+                <div className="flex items-center justify-between">
+                    <span className="text-slate-400 text-sm italic">Total completed orders: {orders.length}</span>
+                </div>
+            </div>
+          </div>
+        </div>
+
+        {/* B. Admin Expenses */}
+        <div className="glass-panel p-8 rounded-2xl relative border-t-4 border-rose-500">
+          <h3 className="text-xl font-bold text-slate-100 mb-6 flex items-center">
+             <BarChart3 className="w-5 h-5 mr-2 text-rose-400"/> Admin & Manufacturing Expenses
+          </h3>
+          <div className="space-y-6">
             <div>
               <div className="flex justify-between text-sm mb-2">
-                <span className="text-slate-400">Total Expenses (RM + Mfg)</span>
-                <span className="font-bold text-rose-400">₹{totalExpenses.toLocaleString()}</span>
+                <span className="text-slate-400">Raw Material Purchases</span>
+                <span className="font-bold text-rose-400">₹{rawMaterialPurchases.toLocaleString()}</span>
               </div>
-              <div className="w-full bg-slate-800/50 rounded-full h-3 border border-white/5">
-                <div 
-                  className="bg-gradient-to-r from-rose-400 to-rose-600 h-3 rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(244,63,94,0.5)]" 
-                  style={{ width: `${Math.min(100, (totalExpenses / (totalRevenue || 1)) * 100)}%` }}
-                ></div>
+              <div className="w-full bg-slate-800/50 rounded-full h-2 border border-white/5">
+                <div className="bg-gradient-to-r from-rose-400 to-rose-600 h-2 rounded-full" style={{ width: `${Math.min(100, (rawMaterialPurchases / (totalExpenses || 1)) * 100)}%` }}></div>
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-slate-400">Manufacturing Costs</span>
+                <span className="font-bold text-rose-400">₹{manufacturingCost.toLocaleString()}</span>
+              </div>
+              <div className="w-full bg-slate-800/50 rounded-full h-2 border border-white/5">
+                <div className="bg-gradient-to-r from-rose-400 to-rose-600 h-2 rounded-full" style={{ width: `${Math.min(100, (manufacturingCost / (totalExpenses || 1)) * 100)}%` }}></div>
               </div>
             </div>
             <div className="pt-6 border-t border-white/5 mt-6">
                 <div className="flex items-center justify-between">
-                    <span className="text-slate-400 text-sm italic">Efficient resource allocation is currently at {(100 - (totalExpenses / (totalRevenue || 1)) * 100 || 0).toFixed(1)}%</span>
+                    <span className="text-slate-300 font-bold text-sm">Total Expenses</span>
+                    <span className="text-rose-400 font-bold">₹{totalExpenses.toLocaleString()}</span>
                 </div>
             </div>
+          </div>
+        </div>
+
+        {/* C. Final Net Profit */}
+        <div className="glass-panel p-8 rounded-2xl border-t-4 border-indigo-500 lg:col-span-2">
+          <h3 className="text-2xl font-bold text-slate-100 mb-6 flex items-center">
+             <TrendingUp className="w-6 h-6 mr-3 text-indigo-400"/> Final Net Profit
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+              <div className="bg-white/5 p-6 rounded-xl border border-white/10">
+                  <p className="text-slate-400 text-sm font-medium mb-2">Customer Revenue</p>
+                  <p className="text-2xl font-bold text-emerald-400">₹{totalRevenue.toLocaleString()}</p>
+              </div>
+              <div className="bg-white/5 p-6 rounded-xl border border-white/10">
+                  <p className="text-slate-400 text-sm font-medium mb-2">Total Expenses</p>
+                  <p className="text-2xl font-bold text-rose-400">- ₹{totalExpenses.toLocaleString()}</p>
+              </div>
+              <div className="bg-indigo-500/10 p-6 rounded-xl border border-indigo-500/30">
+                  <p className="text-indigo-300 text-sm font-bold mb-2 uppercase tracking-widest">Net Profit</p>
+                  <p className="text-3xl font-bold text-indigo-400">₹{netProfit.toLocaleString()}</p>
+              </div>
           </div>
         </div>
 

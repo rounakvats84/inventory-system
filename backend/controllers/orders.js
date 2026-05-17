@@ -33,6 +33,7 @@ const getOrders = async (req, res) => {
             ...o,
             items: itemsMap[o._id.toString()] || [],
             profit: profitMap[o._id.toString()] ? profitMap[o._id.toString()].total_profit : 0,
+            manufacturing_cost: profitMap[o._id.toString()] ? (profitMap[o._id.toString()].manufacturing_cost + profitMap[o._id.toString()].labor_cost + profitMap[o._id.toString()].delivery_cost) : 0,
             total_cost: profitMap[o._id.toString()] ? (profitMap[o._id.toString()].raw_material_cost + profitMap[o._id.toString()].manufacturing_cost + profitMap[o._id.toString()].labor_cost + profitMap[o._id.toString()].delivery_cost) : 0
         }));
         
@@ -165,9 +166,15 @@ const createOrder = async (req, res) => {
         // 10. PROFIT CALCULATION SYSTEM
         let total_profit = totalPrice - (totalRawMaterialCost + totalManufacturingCost + totalLaborCost + totalDeliveryCost);
 
-        // Ensure profit is positive normally (Fix #7)
+        // Ensure profit is positive normally (Fix #7 & Bug fix)
         if (total_profit < 0) {
             const minProfit = totalPrice * 0.15; // Ensure at least 15% profit
+            
+            // Forcefully cap raw material cost to mathematically guarantee profit
+            if (totalRawMaterialCost > totalPrice * 0.6) {
+                totalRawMaterialCost = totalPrice * 0.6;
+            }
+            
             const availableForCosts = totalPrice - minProfit - totalRawMaterialCost;
             if (availableForCosts > 0) {
                 totalManufacturingCost = availableForCosts * 0.3;

@@ -30,7 +30,8 @@ function App() {
   const logoutUser = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    setUser(null);
+    // Navigate via window.location to forcefully clear React state without unmount crashes
+    window.location.href = '/login';
   };
 
   return (

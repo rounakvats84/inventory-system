@@ -171,6 +171,8 @@ const Dashboard = ({ user }) => {
                                                <div className="space-y-2 text-sm text-slate-300">
                                                    <p><span className="text-slate-500">Customer:</span> {order.customer?.name || 'Unknown'}</p>
                                                    <p><span className="text-slate-500">Order Date:</span> {new Date(order.createdAt).toLocaleString()}</p>
+                                                   <p><span className="text-slate-500">Delivery Status:</span> <span className="text-amber-400 font-medium">{dynStatus}</span></p>
+                                                   <p><span className="text-slate-500">Estimated Delivery:</span> {order.estimated_delivery_days} days</p>
                                                    <p><span className="text-slate-500">Subtotal:</span> ₹{Number(order.total_price).toLocaleString()}</p>
                                                    <p><span className="text-slate-500">GST (18%):</span> ₹{(Number(order.total_price) * 0.18).toLocaleString()}</p>
                                                    <p className="font-bold text-emerald-400 pt-2 border-t border-white/10 mt-2">
