@@ -1,9 +1,19 @@
-const { pool } = require('../config/db');
+const Inventory = require('../models/Inventory');
 
 const getInventory = async (req, res) => {
     try {
-        const [rows] = await pool.execute('SELECT * FROM raw_materials ORDER BY id');
-        res.json(rows);
+        const inventories = await Inventory.find().populate('raw_material');
+        // Map to return old format { id: inventory_id or raw_material_id, name, available_quantity, unit_cost, etc }
+        const formatted = inventories.map(inv => ({
+            id: inv.raw_material._id,
+            inventory_id: inv._id,
+            name: inv.raw_material.name,
+            available_quantity: inv.available_quantity,
+            unit_cost: inv.raw_material.unit_cost,
+            procurement_time: inv.raw_material.procurement_time,
+            minimum_threshold: inv.raw_material.minimum_threshold
+        }));
+        res.json(formatted);
     } catch (err) {
         console.error(err);
         res.status(500).send('Server Error');
@@ -11,28 +21,55 @@ const getInventory = async (req, res) => {
 };
 
 const updateInventory = async (req, res) => {
-    const conn = await pool.getConnection();
     try {
-        // expect body: { items: [ { id: 1, available_quantity: 150 }, ... ] }
         const { items } = req.body;
-        
-        await conn.beginTransaction();
         for (let item of items) {
-            await conn.execute(
-                'UPDATE raw_materials SET available_quantity = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?',
-                [item.available_quantity, item.id]
+            await Inventory.findOneAndUpdate(
+                { raw_material: item.id },
+                { available_quantity: item.available_quantity }
             );
         }
-        await conn.commit();
-        
         res.json({ msg: 'Inventory updated successfully' });
     } catch (err) {
-        await conn.rollback();
         console.error(err);
         res.status(500).send('Server Error');
-    } finally {
-        conn.release();
     }
 };
 
-module.exports = { getInventory, updateInventory };
+const AdminPurchase = require('../models/AdminPurchase');
+
+const createPurchase = async (req, res) => {
+    try {
+        const { items, total_cost } = req.body;
+        const purchase = new AdminPurchase({
+            admin: req.user.id,
+            items,
+            total_cost
+        });
+        await purchase.save();
+
+        for (let item of items) {
+            await Inventory.findOneAndUpdate(
+                { raw_material: item.raw_material },
+                { $inc: { available_quantity: item.quantity } }
+            );
+        }
+
+        res.json({ msg: 'Purchase successful', purchase });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server Error');
+    }
+};
+
+const getPurchases = async (req, res) => {
+    try {
+        const purchases = await AdminPurchase.find().populate('items.raw_material').populate('admin').sort({ createdAt: -1 });
+        res.json(purchases);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server Error');
+    }
+};
+
+module.exports = { getInventory, updateInventory, createPurchase, getPurchases };

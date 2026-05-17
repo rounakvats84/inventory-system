@@ -1,150 +1,163 @@
-const { pool } = require('./config/db');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const RawMaterial = require('./models/RawMaterial');
+const Inventory = require('./models/Inventory');
+const Product = require('./models/Product');
+const Customer = require('./models/Customer');
+const Admin = require('./models/Admin');
 
 const bootstrapDB = async () => {
     try {
-        const createTablesQuery = `
-            CREATE TABLE IF NOT EXISTS users (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                email VARCHAR(255) UNIQUE NOT NULL,
-                password VARCHAR(255) NOT NULL,
-                role VARCHAR(50) DEFAULT 'Customer'
-            );
-
-            CREATE TABLE IF NOT EXISTS raw_materials (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255) UNIQUE NOT NULL,
-                available_quantity INT NOT NULL DEFAULT 0,
-                unit_cost DECIMAL(10,2) NOT NULL,
-                procurement_time INT NOT NULL,
-                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                minimum_threshold INT DEFAULT 0
-            );
-
-            CREATE TABLE IF NOT EXISTS products (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255) UNIQUE NOT NULL,
-                selling_price DECIMAL(10,2) NOT NULL,
-                production_time INT NOT NULL,
-                delivery_time INT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS product_recipes (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                product_id INT,
-                raw_material_id INT,
-                quantity_required_per_unit INT NOT NULL,
-                UNIQUE(product_id, raw_material_id),
-                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
-                FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS orders (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id VARCHAR(255) NOT NULL,
-                total_price DECIMAL(10,2) NOT NULL,
-                total_cost DECIMAL(10,2) NOT NULL,
-                profit DECIMAL(10,2) NOT NULL,
-                estimated_time INT NOT NULL,
-                estimated_wait_time INT NOT NULL DEFAULT 0,
-                estimated_completion_time TIMESTAMP NULL,
-                status VARCHAR(50) DEFAULT 'PENDING',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS order_items (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                order_id INT,
-                product_id INT,
-                quantity INT NOT NULL,
-                FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-                FOREIGN KEY (product_id) REFERENCES products(id)
-            );
-        `;
-        
-        // MySQL driver doesn't natively support executing multiple statements by default
-        // unless multipleStatements: true is set, but it's safer to just split them.
-        const queries = createTablesQuery.split(';').map(q => q.trim()).filter(q => q !== '');
-        for (let q of queries) {
-            await pool.query(q);
-        }
-        console.log("MySQL tables checked/created.");
-
-        // Check if data exists
-        const [rows] = await pool.execute('SELECT COUNT(*) as count FROM raw_materials');
-        if (parseInt(rows[0].count) === 0) {
-            console.log("Seeding sample data...");
+        const rmCount = await RawMaterial.countDocuments();
+        if (rmCount < 10) {
+            console.log("Seeding comprehensive MongoDB data...");
+            // Drop existing to prevent mixing if there's partial data
+            await RawMaterial.deleteMany({});
+            await Inventory.deleteMany({});
+            await Product.deleteMany({});
+            
             await seedSampleData();
+        } else {
+            console.log("MongoDB already seeded with comprehensive data.");
         }
-
     } catch (err) {
         console.error("Error bootstrapping DB:", err);
     }
 };
 
 const seedSampleData = async () => {
-    const rmData = [
-        ['Steel Rod', 100, 50, 2, 10],
-        ['Iron Sheet', 200, 30, 1, 20],
-        ['Copper Wire', 50, 80, 3, 5]
-    ];
-    
-    const rmMap = {};
-    for (const rm of rmData) {
-        const [result] = await pool.execute(
-            'INSERT INTO raw_materials (name, available_quantity, unit_cost, procurement_time, minimum_threshold) VALUES (?, ?, ?, ?, ?)',
-            rm
-        );
-        rmMap[rm[0]] = result.insertId;
-    }
-
-    const pdData = [
-        ['Steel Gate', 5000, 2, 1],
-        ['Metal Frame', 3000, 1, 1],
-        ['Steel Door', 7000, 2, 1],
-        ['Industrial Pipe', 2000, 1, 1],
-        ['Reinforced Beam', 8000, 3, 2],
-        ['Metal Container', 10000, 3, 2]
-    ];
-
-    const pdMap = {};
-    for (const pd of pdData) {
-        const [result] = await pool.execute(
-            'INSERT INTO products (name, selling_price, production_time, delivery_time) VALUES (?, ?, ?, ?)',
-            pd
-        );
-        pdMap[pd[0]] = result.insertId;
-    }
-
-    // Recipes
-    const recipes = [
-        { product: 'Steel Gate', rm: 'Steel Rod', qty: 5 },
-        { product: 'Steel Gate', rm: 'Iron Sheet', qty: 10 },
-        
-        { product: 'Metal Frame', rm: 'Steel Rod', qty: 3 },
-        { product: 'Metal Frame', rm: 'Copper Wire', qty: 2 },
-        
-        { product: 'Steel Door', rm: 'Steel Rod', qty: 6 },
-        { product: 'Steel Door', rm: 'Iron Sheet', qty: 12 },
-        { product: 'Steel Door', rm: 'Copper Wire', qty: 2 },
-        
-        { product: 'Industrial Pipe', rm: 'Steel Rod', qty: 4 },
-        { product: 'Industrial Pipe', rm: 'Copper Wire', qty: 1 },
-        
-        { product: 'Reinforced Beam', rm: 'Steel Rod', qty: 10 },
-        { product: 'Reinforced Beam', rm: 'Iron Sheet', qty: 8 },
-        
-        { product: 'Metal Container', rm: 'Iron Sheet', qty: 15 },
-        { product: 'Metal Container', rm: 'Steel Rod', qty: 5 },
-        { product: 'Metal Container', rm: 'Copper Wire', qty: 3 },
+    // 1. Seed 25 Raw Materials
+    const materialsData = [
+        { name: 'Copper', unit_cost: 2, procurement_time: 3, minimum_threshold: 1000 },
+        { name: 'Iron', unit_cost: 0.5, procurement_time: 1, minimum_threshold: 2000 },
+        { name: 'Aluminum', unit_cost: 1.5, procurement_time: 2, minimum_threshold: 1500 },
+        { name: 'Steel', unit_cost: 1, procurement_time: 2, minimum_threshold: 2000 },
+        { name: 'Zinc', unit_cost: 0.8, procurement_time: 4, minimum_threshold: 800 },
+        { name: 'Plastic', unit_cost: 0.2, procurement_time: 1, minimum_threshold: 5000 },
+        { name: 'Carbon Fiber', unit_cost: 5, procurement_time: 5, minimum_threshold: 500 },
+        { name: 'Ferrous Metal', unit_cost: 0.6, procurement_time: 2, minimum_threshold: 1000 },
+        { name: 'Alloy Material', unit_cost: 3, procurement_time: 3, minimum_threshold: 1000 },
+        { name: 'Nickel', unit_cost: 4, procurement_time: 4, minimum_threshold: 400 },
+        { name: 'Lead', unit_cost: 0.5, procurement_time: 2, minimum_threshold: 800 },
+        { name: 'Tin', unit_cost: 1.2, procurement_time: 2, minimum_threshold: 600 },
+        { name: 'Titanium', unit_cost: 10, procurement_time: 7, minimum_threshold: 100 },
+        { name: 'Brass', unit_cost: 2.5, procurement_time: 3, minimum_threshold: 1000 },
+        { name: 'Bronze', unit_cost: 2.2, procurement_time: 3, minimum_threshold: 1000 },
+        { name: 'Rubber', unit_cost: 0.3, procurement_time: 1, minimum_threshold: 3000 },
+        { name: 'Silicone', unit_cost: 1.8, procurement_time: 2, minimum_threshold: 1500 },
+        { name: 'Glass', unit_cost: 0.4, procurement_time: 2, minimum_threshold: 2000 },
+        { name: 'Fiberglass', unit_cost: 1.5, procurement_time: 3, minimum_threshold: 1000 },
+        { name: 'Ceramic', unit_cost: 0.8, procurement_time: 2, minimum_threshold: 1000 },
+        { name: 'Nylon', unit_cost: 0.6, procurement_time: 1, minimum_threshold: 2000 },
+        { name: 'Teflon', unit_cost: 3.5, procurement_time: 3, minimum_threshold: 500 },
+        { name: 'Cobalt', unit_cost: 8, procurement_time: 5, minimum_threshold: 200 },
+        { name: 'Lithium', unit_cost: 12, procurement_time: 6, minimum_threshold: 300 },
+        { name: 'Silver Contact', unit_cost: 50, procurement_time: 4, minimum_threshold: 50 }
     ];
 
-    for (let r of recipes) {
-        await pool.execute(
-            'INSERT INTO product_recipes (product_id, raw_material_id, quantity_required_per_unit) VALUES (?, ?, ?)',
-            [pdMap[r.product], rmMap[r.rm], r.qty]
-        );
+    const rawMaterials = {};
+    for (let md of materialsData) {
+        const doc = await RawMaterial.create(md);
+        rawMaterials[md.name] = doc;
+        
+        // 2. Seed Inventory
+        // Simulate some low stocks for shortage demonstration
+        let qty = md.minimum_threshold * 2;
+        if (['Copper', 'Ferrous Metal', 'Titanium'].includes(md.name)) {
+            qty = md.minimum_threshold / 2; // Low stock
+        }
+        await Inventory.create({ raw_material: doc._id, available_quantity: qty });
     }
+
+    // 3. Seed 10 Final Products
+    const productsData = [
+        {
+            name: 'Copper Wire', selling_price: 6000, production_time: 1, packaging_time: 1, delivery_time: 1,
+            recipe: [
+                { raw_material: rawMaterials['Copper']._id, quantity_required_per_unit: 50 },
+                { raw_material: rawMaterials['Ferrous Metal']._id, quantity_required_per_unit: 20 },
+                { raw_material: rawMaterials['Plastic']._id, quantity_required_per_unit: 10 }
+            ]
+        },
+        {
+            name: 'Iron Gate', selling_price: 15000, production_time: 3, packaging_time: 1, delivery_time: 2,
+            recipe: [
+                { raw_material: rawMaterials['Iron']._id, quantity_required_per_unit: 5000 },
+                { raw_material: rawMaterials['Steel']._id, quantity_required_per_unit: 1000 },
+                { raw_material: rawMaterials['Zinc']._id, quantity_required_per_unit: 200 }
+            ]
+        },
+        {
+            name: 'Steel Rod', selling_price: 2500, production_time: 1, packaging_time: 1, delivery_time: 1,
+            recipe: [
+                { raw_material: rawMaterials['Steel']._id, quantity_required_per_unit: 1000 },
+                { raw_material: rawMaterials['Carbon Fiber']._id, quantity_required_per_unit: 50 }
+            ]
+        },
+        {
+            name: 'Aluminum Pipe', selling_price: 3500, production_time: 2, packaging_time: 1, delivery_time: 1,
+            recipe: [
+                { raw_material: rawMaterials['Aluminum']._id, quantity_required_per_unit: 800 },
+                { raw_material: rawMaterials['Zinc']._id, quantity_required_per_unit: 100 }
+            ]
+        },
+        {
+            name: 'Metal Sheet', selling_price: 4500, production_time: 2, packaging_time: 1, delivery_time: 1,
+            recipe: [
+                { raw_material: rawMaterials['Alloy Material']._id, quantity_required_per_unit: 1500 },
+                { raw_material: rawMaterials['Iron']._id, quantity_required_per_unit: 500 }
+            ]
+        },
+        {
+            name: 'Electrical Cable', selling_price: 8000, production_time: 2, packaging_time: 1, delivery_time: 1,
+            recipe: [
+                { raw_material: rawMaterials['Copper']._id, quantity_required_per_unit: 200 },
+                { raw_material: rawMaterials['Rubber']._id, quantity_required_per_unit: 150 },
+                { raw_material: rawMaterials['Silicone']._id, quantity_required_per_unit: 50 }
+            ]
+        },
+        {
+            name: 'Industrial Bolt', selling_price: 500, production_time: 1, packaging_time: 1, delivery_time: 1,
+            recipe: [
+                { raw_material: rawMaterials['Titanium']._id, quantity_required_per_unit: 20 },
+                { raw_material: rawMaterials['Steel']._id, quantity_required_per_unit: 80 }
+            ]
+        },
+        {
+            name: 'Iron Frame', selling_price: 12000, production_time: 2, packaging_time: 1, delivery_time: 2,
+            recipe: [
+                { raw_material: rawMaterials['Iron']._id, quantity_required_per_unit: 3000 },
+                { raw_material: rawMaterials['Brass']._id, quantity_required_per_unit: 200 }
+            ]
+        },
+        {
+            name: 'Steel Panel', selling_price: 9000, production_time: 2, packaging_time: 1, delivery_time: 2,
+            recipe: [
+                { raw_material: rawMaterials['Steel']._id, quantity_required_per_unit: 2000 },
+                { raw_material: rawMaterials['Lead']._id, quantity_required_per_unit: 100 }
+            ]
+        },
+        {
+            name: 'Copper Coil', selling_price: 11000, production_time: 3, packaging_time: 1, delivery_time: 1,
+            recipe: [
+                { raw_material: rawMaterials['Copper']._id, quantity_required_per_unit: 400 },
+                { raw_material: rawMaterials['Silver Contact']._id, quantity_required_per_unit: 5 }
+            ]
+        }
+    ];
+
+    for (let pd of productsData) {
+        await Product.create(pd);
+    }
+
+    // 4. Seed Admin
+    const adminExists = await Admin.findOne({ email: 'admin@company.com' });
+    if (!adminExists) {
+        const salt = await bcrypt.genSalt(10);
+        const hashedAdminPassword = await bcrypt.hash('admin123', salt);
+        await Admin.create({ name: 'Admin User', email: 'admin@company.com', password: hashedAdminPassword });
+    }
+
     console.log("Sample data seeded successfully!");
 };
 

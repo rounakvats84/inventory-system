@@ -1,9 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    @apply font-sans antialiased bg-slate-50 text-slate-900;
+    @apply font-sans antialiased bg-slate-900 text-slate-100;
+    font-family: 'Outfit', sans-serif;
+    background-image: radial-gradient(circle at 15% 50%, rgba(79, 70, 229, 0.1), transparent 25%),
+      radial-gradient(circle at 85% 30%, rgba(236, 72, 153, 0.1), transparent 25%);
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/5 backdrop-blur-lg border border-white/10 shadow-xl;
   }
 }
