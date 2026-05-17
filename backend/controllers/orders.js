@@ -78,7 +78,7 @@ const createOrder = async (req, res) => {
         
         const [orderInsertRes] = await conn.execute(`
             INSERT INTO orders (user_id, total_price, total_cost, profit, estimated_time, estimated_wait_time, estimated_completion_time, status)
-            VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL ? DAY), ?)
+            VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL (? * 10) SECOND), ?)
         `, [user_id, totalPrice, totalCost, profit, estimatedTime, maxWaitTime, estimatedTime, status]);
         
         const orderId = orderInsertRes.insertId;
