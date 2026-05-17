@@ -62,7 +62,9 @@ cd inventory-system
 ### 2. Start the databases
 Make sure Docker Desktop is **open and running**, then:
 ```bash
-docker compose up -d
+cd backend
+npm install 
+npm run db
 ```
 This automatically starts PostgreSQL on port `5432` and MongoDB on port `27017`.
 
