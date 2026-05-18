@@ -21,9 +21,7 @@ When an order is placed:
 |---|---|
 | Frontend | React.js (Vite), Tailwind CSS, Framer Motion |
 | Backend | Node.js, Express.js |
-| User Auth DB | MongoDB (via Mongoose) |
-| Core Data DB | PostgreSQL (via node-postgres) |
-| Dev Databases | Docker + Docker Compose |
+| Database | MongoDB (via Mongoose) |
 
 ---
 
@@ -31,11 +29,10 @@ When an order is placed:
 
 ```
 inventory-system/
-├── docker-compose.yml    ← Starts MongoDB + PostgreSQL containers
 ├── backend/              ← Express API (port 5000)
-│   ├── server.js
-│   ├── seed.js           ← Auto-creates tables and seeds sample data
-│   ├── config/db.js
+│   ├── server.js         ← App entry point
+│   ├── seed.js           ← Auto-seeds sample data into MongoDB on startup
+│   ├── config/db.js      ← MongoDB connection logic
 │   ├── models/           ← Mongoose models
 │   ├── controllers/      ← Business logic
 │   └── routes/           ← API endpoints
@@ -51,7 +48,9 @@ inventory-system/
 
 ### Prerequisites
 - [Node.js](https://nodejs.org) v18 or higher
-- [Docker Desktop](https://www.docker.com/products/docker-desktop) (must be running)
+- [MongoDB](https://www.mongodb.com/try/download/community) installed and running locally on port `27017`. 
+
+*(Note: There is no Docker or PostgreSQL required for this setup.)*
 
 ### 1. Clone the repo
 ```bash
@@ -59,34 +58,26 @@ git clone https://github.com/YOUR_USERNAME/inventory-system.git
 cd inventory-system
 ```
 
-### 2. Start the databases
-```bash
-cd backend
-npm install 
-npm run db
-```
-This automatically starts PostgreSQL on port `5432` and MongoDB on port `27017`.
+### 2. Start the Backend server (and Seed Data)
+The backend uses a local MongoDB instance. **Ensure MongoDB is running on your system.**
+When you start the server, `seed.js` will automatically run and populate the MongoDB database with sample raw materials and products if they don't already exist.
 
-### 3. Start the backend
+Open your terminal:
 ```bash
 cd backend
 npm install
 npm start
 ```
-On first run, the backend will automatically:
-- Create all PostgreSQL tables
-- Seed 3 raw materials (Steel Rod, Iron Sheet, Copper Wire)
-- Seed 6 products (Steel Gate, Metal Frame, Steel Door, etc.)
+The backend will run on `http://localhost:5000`. You will see messages confirming MongoDB is connected and the seed script has executed.
 
-### 4. Start the frontend
-Open a **new terminal tab**:
+### 3. Start the Frontend app
+Open a **new terminal window/tab**:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-
-The app will be available at **http://localhost:5173**
+The frontend will be available at **http://localhost:5173**
 
 ---
 
@@ -115,7 +106,7 @@ The app will be available at **http://localhost:5173**
 
 ---
 
-## 📦 Sample Data (Auto-seeded)
+## 📦 Sample Data (Auto-seeded by seed.js)
 
 ### Raw Materials
 | Material | Qty | Unit Cost | Procurement Time |
@@ -140,12 +131,4 @@ The app will be available at **http://localhost:5173**
 
 ```
 PENDING → WAITING_FOR_MATERIAL (if stock short) → IN_PRODUCTION → COMPLETED
-```
-
----
-
-## 🛑 Stopping the Databases
-
-```bash
-docker compose down
 ```
