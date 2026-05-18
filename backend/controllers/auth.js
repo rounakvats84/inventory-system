@@ -46,25 +46,17 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
     try {
-        const { email, password, role } = req.body;
+        const { email, password } = req.body;
 
         let user;
-        let assignedRole = role;
+        let assignedRole;
 
-        if (role === 'Admin') {
-            user = await Admin.findOne({ email });
+        user = await Admin.findOne({ email });
+        if (user) {
             assignedRole = 'Admin';
-        } else if (role === 'Customer') {
+        } else {
             user = await Customer.findOne({ email });
             assignedRole = 'Customer';
-        } else {
-            // try both
-            user = await Admin.findOne({ email });
-            if (user) assignedRole = 'Admin';
-            else {
-                user = await Customer.findOne({ email });
-                assignedRole = 'Customer';
-            }
         }
 
         if (!user) {
